@@ -128,6 +128,80 @@ function App() {
 
   const totalPages = Math.ceil(totalStudents / itemsPerPage);
 
+
+  // Add this function inside your App component, before the return statement
+  const exportToCSV = async () => {
+    try {
+      setIsLoading(true);
+      let allStudents: Student[] = [];
+      const limit = 100; // Appwrite's maximum limit per request
+      let offset = 0;
+      let hasMore = true;
+
+      // Fetch all students in batches
+      while (hasMore) {
+        const response = await databases.listDocuments(
+          '67740d6d001e6019b3b7',
+          '67740d7700148b3fcccb',
+          [
+            Query.limit(limit),
+            Query.offset(offset),
+            ...(selectedClass ? [Query.equal('class', selectedClass)] : [])
+          ]
+        );
+
+        allStudents = [...allStudents, ...(response.documents as Student[])];
+        offset += limit;
+        hasMore = offset < response.total;
+      }
+
+      if (allStudents.length === 0) {
+        alert('No students found to export');
+        return;
+      }
+
+      // CSV header
+      const headers = ['Name', 'Class', 'Number', 'Description'];
+
+      // Convert student data to CSV rows
+      const csvRows = [
+        headers.join(','), // Header row
+        ...allStudents.map(student =>
+          [
+            `"${student.name}"`,
+            `"${student.class}"`,
+            `"${student.number}"`,
+            `"${student.description || ''}"`
+          ].join(',')
+        )
+      ];
+
+      // Create CSV content
+      const csvContent = csvRows.join('\n');
+
+      // Create a Blob with the CSV content
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+
+      // Create a download link
+      const link = document.createElement('a');
+      const url = URL.createObjectURL(blob);
+      link.setAttribute('href', url);
+      link.setAttribute('download', `myschool_student_number_dataset_${new Date().toISOString().split('T')[0]}.csv`);
+
+      // Trigger download
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+
+    } catch (error) {
+      console.error('Error exporting to CSV:', error);
+      alert('Failed to export students data');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   if (!isAuthenticated) {
     return (
 <div className="min-h-screen bg-gradient-to-br from-purple-50 to-indigo-50 flex items-center justify-center p-4">
@@ -185,7 +259,7 @@ function App() {
         </motion.button>
       </form>
 
-  
+
 
     </div>
   </motion.div>
@@ -202,6 +276,16 @@ function App() {
             <button onClick={() => { setEditStudent({ name: '', number: '', class: '', description: '' }); setShowModal(true); }} className="flex items-center p-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors">
               <Plus size={20} /> <span className="ml-1">Add</span>
             </button>
+            <button
+      onClick={exportToCSV}
+      disabled={isLoading}
+      className="flex items-center p-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors disabled:opacity-50"
+    >
+      <svg className="w-5 h-5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+      </svg>
+      <span>Export CSV</span>
+    </button>
             <button onClick={handleLogout} className="flex items-center p-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors">
               <LogOut size={20} /> <span className="ml-1">Logout</span>
             </button>
