@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Trash, Edit, LogOut } from 'lucide-react';
+import { Plus, Trash, Edit, LogOut, Download } from 'lucide-react';
 import { Client, Databases, ID, Query } from 'appwrite';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -16,11 +16,17 @@ interface Student {
   number: string;
   class: string;
   description?: string;
+  englishName: string;
+  motherName: string;
+  fatherName: string;
+  photoUrl?: string;
 }
 
 const CLASS_OPTIONS = [
   "নার্সারি", "প্লে", "প্রথম", "দ্বিতীয়", "তৃতীয়", "চতুর্থ", "পঞ্চম", "ষষ্ঠ"
 ];
+
+const IMAGE_HOST_KEY = '57b4746af92a5b794e089bc9d0ab3d37';
 
 function App() {
   const [students, setStudents] = useState<Student[]>([]);
@@ -33,8 +39,20 @@ function App() {
   const [showDeleteModal, setShowDeleteModal] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(0);
   const [totalStudents, setTotalStudents] = useState(0);
-  const [isLoading, setIsLoading] = useState(false); // New loading state
-  const itemsPerPage = 10;
+  const [isLoading, setIsLoading] = useState(false);
+  const [selectedImage, setSelectedImage] = useState<File | null>(null);
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [displayOptions, setDisplayOptions] = useState({
+    showName: true,
+    showNumber: true,
+    showClass: true,
+    showDescription: true,
+    showEnglishName: true,
+    showFatherName: true,
+    showMotherName: true,
+    showPhoto: true
+  });
+  const itemsPerPage = 30;
 
   useEffect(() => {
     const loggedIn = localStorage.getItem('isLoggedIn') === 'true';
@@ -43,7 +61,7 @@ function App() {
   }, [currentPage, selectedClass]);
 
   const fetchStudents = async () => {
-    setIsLoading(true); // Start loading
+    setIsLoading(true);
     try {
       const queries = [Query.limit(itemsPerPage), Query.offset(currentPage * itemsPerPage)];
       if (selectedClass) queries.push(Query.equal('class', selectedClass));
@@ -59,7 +77,7 @@ function App() {
     } catch (error) {
       console.error('Error fetching students:', error);
     } finally {
-      setIsLoading(false); // Stop loading
+      setIsLoading(false);
     }
   };
 
@@ -82,35 +100,48 @@ function App() {
   const handleSave = async () => {
     if (!editStudent) return;
 
-    setIsLoading(true); // Start loading
+    setIsLoading(true);
     try {
+      const studentData = {
+        name: editStudent.name,
+        number: editStudent.number,
+        class: editStudent.class,
+        description: editStudent.description || '',
+        englishName: editStudent.englishName,
+        motherName: editStudent.motherName,
+        fatherName: editStudent.fatherName,
+        photoUrl: editStudent.photoUrl || ''
+      };
+
       if (editStudent.$id) {
         await databases.updateDocument(
           '67740d6d001e6019b3b7',
           '67740d7700148b3fcccb',
           editStudent.$id,
-          editStudent
+          studentData
         );
       } else {
         await databases.createDocument(
           '67740d6d001e6019b3b7',
           '67740d7700148b3fcccb',
           ID.unique(),
-          editStudent
+          studentData
         );
       }
       fetchStudents();
       setShowModal(false);
       setEditStudent(null);
+      setSelectedImage(null);
     } catch (error) {
       console.error('Error saving student:', error);
+      alert('Failed to save student. Check console for details.');
     } finally {
-      setIsLoading(false); // Stop loading
+      setIsLoading(false);
     }
   };
 
   const handleDelete = async (studentId: string) => {
-    setIsLoading(true); // Start loading
+    setIsLoading(true);
     try {
       await databases.deleteDocument(
         '67740d6d001e6019b3b7',
@@ -122,23 +153,18 @@ function App() {
     } catch (error) {
       console.error('Error deleting student:', error);
     } finally {
-      setIsLoading(false); // Stop loading
+      setIsLoading(false);
     }
   };
 
-  const totalPages = Math.ceil(totalStudents / itemsPerPage);
-
-
-  // Add this function inside your App component, before the return statement
   const exportToCSV = async () => {
     try {
       setIsLoading(true);
       let allStudents: Student[] = [];
-      const limit = 100; // Appwrite's maximum limit per request
+      const limit = 100;
       let offset = 0;
       let hasMore = true;
 
-      // Fetch all students in batches
       while (hasMore) {
         const response = await databases.listDocuments(
           '67740d6d001e6019b3b7',
@@ -160,40 +186,33 @@ function App() {
         return;
       }
 
-      // CSV header
-      const headers = ['Name', 'Class', 'Number', 'Description'];
-
-      // Convert student data to CSV rows
+      const headers = ['Name', 'Class', 'Number', 'Description', 'English Name', 'Mother Name', 'Father Name', 'Photo URL'];
       const csvRows = [
-        headers.join(','), // Header row
+        headers.join(','),
         ...allStudents.map(student =>
           [
             `"${student.name}"`,
             `"${student.class}"`,
             `"${student.number}"`,
-            `"${student.description || ''}"`
+            `"${student.description || ''}"`,
+            `"${student.englishName || ''}"`,
+            `"${student.motherName || ''}"`,
+            `"${student.fatherName || ''}"`,
+            `"${student.photoUrl || ''}"`
           ].join(',')
         )
       ];
 
-      // Create CSV content
       const csvContent = csvRows.join('\n');
-
-      // Create a Blob with the CSV content
       const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-
-      // Create a download link
       const link = document.createElement('a');
       const url = URL.createObjectURL(blob);
       link.setAttribute('href', url);
       link.setAttribute('download', `myschool_student_number_dataset_${new Date().toISOString().split('T')[0]}.csv`);
-
-      // Trigger download
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
       URL.revokeObjectURL(url);
-
     } catch (error) {
       console.error('Error exporting to CSV:', error);
       alert('Failed to export students data');
@@ -202,90 +221,166 @@ function App() {
     }
   };
 
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setSelectedImage(file);
+    const formData = new FormData();
+    formData.append("image", file);
+
+    try {
+      setIsLoading(true);
+      const response = await fetch(
+        `https://api.imgbb.com/1/upload?key=${IMAGE_HOST_KEY}`,
+        {
+          method: "POST",
+          body: formData,
+        }
+      );
+
+      if (response.ok) {
+        const data = await response.json();
+        setEditStudent(prev => prev ? { ...prev, photoUrl: data.data.url } : null);
+      } else {
+        console.error("Error uploading image to ImgBB");
+        alert("Failed to upload image");
+      }
+    } catch (error) {
+      console.error("Error uploading image:", error);
+      alert("Error uploading image");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleDownload = (student: Student) => {
+    if (!student.photoUrl) return;
+
+    const link = document.createElement('a');
+    link.href = student.photoUrl;
+    link.download = `${student.englishName}_${student.class}_passport.jpg`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+ // Update this function in your code
+const handlePhotoDownload = async (student: Student) => {
+  if (!student.photoUrl) return;
+
+  try {
+    // Fetch the image
+    const response = await fetch(student.photoUrl);
+    const blob = await response.blob();
+
+    // Get the file extension from the URL
+    const urlParts = student.photoUrl.split('.');
+    const extension = urlParts[urlParts.length - 1].toLowerCase();
+
+    // Create filename using English name and class
+    const fileName = `${student.englishName}_${student.class}.${extension === 'png' || extension === 'jpg' || extension === 'jpeg' ? extension : 'jpg'}`;
+
+    // Create a temporary URL for the blob
+    const url = window.URL.createObjectURL(blob);
+
+    // Create a temporary anchor element
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = fileName;
+
+    // Trigger the download
+    document.body.appendChild(link);
+    link.click();
+
+    // Clean up
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(url);
+  } catch (error) {
+    console.error('Error downloading photo:', error);
+    alert('Failed to download photo. Please try again.');
+  }
+};
+
+  const totalPages = Math.ceil(totalStudents / itemsPerPage);
+
   if (!isAuthenticated) {
     return (
-<div className="min-h-screen bg-gradient-to-br from-purple-50 to-indigo-50 flex items-center justify-center p-4">
-  <motion.div
-    initial={{ opacity: 0, y: 20, scale: 0.95 }}
-    animate={{ opacity: 1, y: 0, scale: 1 }}
-    whileHover={{ scale: 1.005 }}
-    className="w-full max-w-md bg-white rounded-2xl shadow-xl p-8 relative overflow-hidden border border-white/20 backdrop-blur-lg"
-  >
-    <div className="absolute inset-0 bg-gradient-to-br from-purple-100 to-pink-100 opacity-30" />
-
-    <div className="relative z-10">
-      <h2 className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-600 to-pink-600 text-center mb-8">
-        Welcome Back
-      </h2>
-
-      <form onSubmit={handleLogin} className="space-y-6">
-        <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
-          <div className="relative">
-            <input
-              type="text"
-              placeholder="Username"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              className="w-full p-4 pl-12 border-0 bg-gray-50/50 rounded-xl focus:ring-2 focus:ring-purple-500 focus:bg-white shadow-sm transition-all"
-            />
-            <svg className="w-6 h-6 absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-            </svg>
-          </div>
-        </motion.div>
-
-        <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
-          <div className="relative">
-            <input
-              type="password"
-              placeholder="Password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="w-full p-4 pl-12 border-0 bg-gray-50/50 rounded-xl focus:ring-2 focus:ring-purple-500 focus:bg-white shadow-sm transition-all"
-            />
-            <svg className="w-6 h-6 absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-            </svg>
-          </div>
-        </motion.div>
-
-        <motion.button
-          whileHover={{ scale: 1.05 }}
-          whileTap={{ scale: 0.95 }}
-          type="submit"
-          className="w-full p-4 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-semibold rounded-xl shadow-lg hover:shadow-xl transition-all"
+      <div className="min-h-screen bg-gradient-to-br from-purple-50 to-indigo-50 flex items-center justify-center p-4">
+        <motion.div
+          initial={{ opacity: 0, y: 20, scale: 0.95 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          whileHover={{ scale: 1.005 }}
+          className="w-full max-w-md bg-white rounded-2xl shadow-xl p-8 relative overflow-hidden border border-white/20 backdrop-blur-lg"
         >
-          Unlock Your Account
-        </motion.button>
-      </form>
-
-
-
-    </div>
-  </motion.div>
-</div>
+          <div className="absolute inset-0 bg-gradient-to-br from-purple-100 to-pink-100 opacity-30" />
+          <div className="relative z-10">
+            <h2 className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-600 to-pink-600 text-center mb-8">
+              Welcome Back
+            </h2>
+            <form onSubmit={handleLogin} className="space-y-6">
+              <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
+                <div className="relative">
+                  <input
+                    type="text"
+                    placeholder="Username"
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value)}
+                    className="w-full p-4 pl-12 border-0 bg-gray-50/50 rounded-xl focus:ring-2 focus:ring-purple-500 focus:bg-white shadow-sm transition-all"
+                  />
+                  <svg className="w-6 h-6 absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                  </svg>
+                </div>
+              </motion.div>
+              <motion.div whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}>
+                <div className="relative">
+                  <input
+                    type="password"
+                    placeholder="Password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="w-full p-4 pl-12 border-0 bg-gray-50/50 rounded-xl focus:ring-2 focus:ring-purple-500 focus:bg-white shadow-sm transition-all"
+                  />
+                  <svg className="w-6 h-6 absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                  </svg>
+                </div>
+              </motion.div>
+              <motion.button
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                type="submit"
+                className="w-full p-4 bg-gradient-to-r from-purple-600 to-pink-600 text-white font-semibold rounded-xl shadow-lg hover:shadow-xl transition-all"
+              >
+                Unlock Your Account
+              </motion.button>
+            </form>
+          </div>
+        </motion.div>
+      </div>
     );
   }
 
   return (
     <div className="min-h-screen bg-gray-50 p-4 md:p-6">
-      <div className="max-w-5xl mx-auto">
+      <div className="max-w-7xl mx-auto">
         <div className="flex flex-col sm:flex-row justify-between items-center mb-6 gap-4">
           <h1 className="text-2xl font-semibold text-gray-800">Student Management</h1>
           <div className="flex gap-3">
-            <button onClick={() => { setEditStudent({ name: '', number: '', class: '', description: '' }); setShowModal(true); }} className="flex items-center p-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors">
+            <button onClick={() => { setEditStudent({ name: '', number: '', class: '', description: '', englishName: '', motherName: '', fatherName: '' }); setShowModal(true); }} className="flex items-center p-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors">
               <Plus size={20} /> <span className="ml-1">Add</span>
             </button>
             <button
-      onClick={exportToCSV}
-      disabled={isLoading}
-      className="flex items-center p-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors disabled:opacity-50"
-    >
-      <svg className="w-5 h-5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-      </svg>
-      <span>Export CSV</span>
-    </button>
+              onClick={exportToCSV}
+              disabled={isLoading}
+              className="flex items-center p-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors disabled:opacity-50"
+            >
+              <svg className="w-5 h-5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+              </svg>
+              <span>Export CSV</span>
+            </button>
             <button onClick={handleLogout} className="flex items-center p-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors">
               <LogOut size={20} /> <span className="ml-1">Logout</span>
             </button>
@@ -303,6 +398,43 @@ function App() {
           </select>
         </div>
 
+        <div className="bg-white p-4 rounded-xl shadow-md mb-6">
+  <button
+    onClick={() => setIsExpanded(!isExpanded)}
+    className="w-full flex justify-between items-center hover:bg-gray-50 rounded-lg p-2 -m-2"
+  >
+    <h3 className="text-lg font-semibold text-gray-800">Display Options</h3>
+    <svg
+      className={`w-5 h-5 transform transition-transform ${isExpanded ? 'rotate-180' : ''}`}
+      fill="none"
+      stroke="currentColor"
+      viewBox="0 0 24 24"
+    >
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+    </svg>
+  </button>
+
+  {isExpanded && (
+    <div className="mt-4 animate-slideDown">
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+        {Object.entries(displayOptions).map(([key, value]) => (
+          <label key={key} className="flex items-center gap-2 p-2 rounded-lg hover:bg-gray-100 transition-colors">
+            <input
+              type="checkbox"
+              checked={value}
+              onChange={e => setDisplayOptions(prev => ({ ...prev, [key]: e.target.checked }))}
+              className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
+            />
+            <span className="text-sm capitalize">
+              {key.replace('show', '').replace(/([A-Z])/g, ' $1').trim()}
+            </span>
+          </label>
+        ))}
+      </div>
+    </div>
+  )}
+</div>
+
         <motion.div layout className="bg-white rounded-xl shadow-md overflow-hidden relative">
           {isLoading && (
             <div className="absolute inset-0 bg-gray-100 bg-opacity-75 flex items-center justify-center">
@@ -316,9 +448,14 @@ function App() {
           <table className="w-full text-sm md:text-base">
             <thead>
               <tr className="bg-gray-100 text-gray-700">
-                <th className="p-3 text-left">Name</th>
-                <th className="p-3 text-left">Class</th>
-                <th className="p-3 text-left">Number</th>
+                {displayOptions.showName && <th className="p-3 text-left">Name</th>}
+                {displayOptions.showClass && <th className="p-3 text-left">Class</th>}
+                {displayOptions.showNumber && <th className="p-3 text-left">Number</th>}
+                {displayOptions.showDescription && <th className="p-3 text-left">Description</th>}
+                {displayOptions.showEnglishName && <th className="p-3 text-left">English Name</th>}
+                {displayOptions.showFatherName && <th className="p-3 text-left">Father's Name</th>}
+                {displayOptions.showMotherName && <th className="p-3 text-left">Mother's Name</th>}
+                {displayOptions.showPhoto && <th className="p-3 text-left">Photo</th>}
                 <th className="p-3 text-left">Actions</th>
               </tr>
             </thead>
@@ -332,9 +469,20 @@ function App() {
                     exit={{ opacity: 0 }}
                     className="border-b hover:bg-gray-50 transition-colors"
                   >
-                    <td className="p-3">{student.name}</td>
-                    <td className="p-3">{student.class}</td>
-                    <td className="p-3">{student.number}</td>
+                    {displayOptions.showName && <td className="p-3">{student.name}</td>}
+                    {displayOptions.showClass && <td className="p-3">{student.class}</td>}
+                    {displayOptions.showNumber && <td className="p-3">{student.number}</td>}
+                    {displayOptions.showDescription && <td className="p-3">{student.description}</td>}
+                    {displayOptions.showEnglishName && <td className="p-3">{student.englishName}</td>}
+                    {displayOptions.showFatherName && <td className="p-3">{student.fatherName}</td>}
+                    {displayOptions.showMotherName && <td className="p-3">{student.motherName}</td>}
+                    {displayOptions.showPhoto && (
+                      <td className="p-3">
+                        {student.photoUrl && (
+                          <img src={student.photoUrl} alt="passport" className="w-12 h-12 object-cover rounded" />
+                        )}
+                      </td>
+                    )}
                     <td className="p-3 flex gap-2">
                       <button onClick={() => { setEditStudent(student); setShowModal(true); }} className="text-blue-500 hover:text-blue-700">
                         <Edit size={20} />
@@ -342,6 +490,11 @@ function App() {
                       <button onClick={() => setShowDeleteModal(student.$id!)} className="text-red-500 hover:text-red-700">
                         <Trash size={20} />
                       </button>
+                      {student.photoUrl && (
+                        <button onClick={() => handlePhotoDownload(student)} className="text-green-500 hover:text-green-700">
+                          <Download size={20} />
+                        </button>
+                      )}
                     </td>
                   </motion.tr>
                 ))}
@@ -353,34 +506,33 @@ function App() {
           )}
         </motion.div>
 
-{/* Pagination */}
-<div className="flex flex-col sm:flex-row justify-center sm:justify-between items-center mt-4 gap-4">
-  <div className="flex justify-center gap-4 w-full sm:w-auto">
-    <button
-      disabled={currentPage === 0 || isLoading}
-      onClick={() => setCurrentPage(currentPage - 1)}
-      className="p-2 bg-blue-500 text-white rounded-lg disabled:opacity-50 hover:bg-blue-600 transition-colors w-24 sm:w-auto"
-    >
-      Previous
-    </button>
-    <button
-      disabled={currentPage + 1 >= totalPages || isLoading}
-      onClick={() => setCurrentPage(currentPage + 1)}
-      className="p-2 bg-blue-500 text-white rounded-lg disabled:opacity-50 hover:bg-blue-600 transition-colors w-24 sm:w-auto"
-    >
-      Next
-    </button>
-  </div>
-  <span className="text-gray-700">Page {currentPage + 1} of {totalPages}</span>
-</div>
+        <div className="flex flex-col sm:flex-row justify-center sm:justify-between items-center mt-4 gap-4">
+          <div className="flex justify-center gap-4 w-full sm:w-auto">
+            <button
+              disabled={currentPage === 0 || isLoading}
+              onClick={() => setCurrentPage(currentPage - 1)}
+              className="p-2 bg-blue-500 text-white rounded-lg disabled:opacity-50 hover:bg-blue-600 transition-colors w-24 sm:w-auto"
+            >
+              Previous
+            </button>
+            <button
+              disabled={currentPage + 1 >= totalPages || isLoading}
+              onClick={() => setCurrentPage(currentPage + 1)}
+              className="p-2 bg-blue-500 text-white rounded-lg disabled:opacity-50 hover:bg-blue-600 transition-colors w-24 sm:w-auto"
+            >
+              Next
+            </button>
+          </div>
+          <span className="text-gray-700">Page {currentPage + 1} of {totalPages}</span>
+        </div>
 
-        {/* Edit/Add Modal */}
+        {/* Responsive Edit/Add Modal */}
         {showModal && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
             <motion.div
               initial={{ scale: 0.9, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
-              className="bg-white rounded-xl p-6 w-full max-w-md"
+              className="bg-white rounded-xl p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto"
             >
               <h2 className="text-xl font-semibold text-gray-800 mb-4">{editStudent?.$id ? 'Edit' : 'Add'} Student</h2>
               <div className="space-y-4">
@@ -390,6 +542,15 @@ function App() {
                   value={editStudent?.name || ''}
                   onChange={e => setEditStudent({ ...editStudent!, name: e.target.value })}
                   className="w-full p-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400"
+                  required
+                />
+                                <input
+                  type="text"
+                  placeholder="English Name"
+                  value={editStudent?.englishName || ''}
+                  onChange={e => setEditStudent({ ...editStudent!, englishName: e.target.value })}
+                  className="w-full p-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400"
+                  required
                 />
                 <input
                   type="text"
@@ -397,11 +558,13 @@ function App() {
                   value={editStudent?.number || ''}
                   onChange={e => setEditStudent({ ...editStudent!, number: e.target.value })}
                   className="w-full p-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400"
+                  required
                 />
                 <select
                   value={editStudent?.class || ''}
                   onChange={e => setEditStudent({ ...editStudent!, class: e.target.value })}
                   className="w-full p-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400"
+                  required
                 >
                   <option value="">Select Class</option>
                   {CLASS_OPTIONS.map(cls => <option key={cls} value={cls}>{cls}</option>)}
@@ -410,13 +573,61 @@ function App() {
                   placeholder="Description"
                   value={editStudent?.description || ''}
                   onChange={e => setEditStudent({ ...editStudent!, description: e.target.value })}
-                  className="w-full p-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400"
+                  className="w-full p-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400 min-h-[100px]"
                 />
+
+                <input
+                  type="text"
+                  placeholder="Father's Name"
+                  value={editStudent?.fatherName || ''}
+                  onChange={e => setEditStudent({ ...editStudent!, fatherName: e.target.value })}
+                  className="w-full p-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400"
+                  required
+                />
+                <input
+                  type="text"
+                  placeholder="Mother's Name"
+                  value={editStudent?.motherName || ''}
+                  onChange={e => setEditStudent({ ...editStudent!, motherName: e.target.value })}
+                  className="w-full p-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400"
+                  required
+                />
+                <div className="space-y-2">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    onChange={handleImageUpload}
+                    className="w-full p-2 border border-gray-300 rounded-lg"
+                  />
+                  {editStudent?.photoUrl && (
+                    <div className="relative">
+                      <img src={editStudent.photoUrl} alt="Preview" className="w-32 h-32 object-cover rounded mx-auto" />
+                      <button
+                        onClick={() => setEditStudent({ ...editStudent!, photoUrl: '' })}
+                        className="absolute top-0 right-0 bg-red-500 text-white p-1 rounded-full"
+                      >
+                        <Trash size={16} />
+                      </button>
+                    </div>
+                  )}
+                </div>
                 <div className="flex gap-2">
-                  <button onClick={handleSave} disabled={isLoading} className="flex-1 p-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors disabled:opacity-50">
+                  <button
+                    onClick={handleSave}
+                    disabled={isLoading || !editStudent?.name || !editStudent?.number || !editStudent?.class}
+                    className="flex-1 p-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors disabled:opacity-50"
+                  >
                     Save
                   </button>
-                  <button onClick={() => setShowModal(false)} disabled={isLoading} className="flex-1 p-2 bg-gray-300 text-gray-800 rounded-lg hover:bg-gray-400 transition-colors disabled:opacity-50">
+                  <button
+                    onClick={() => {
+                      setShowModal(false);
+                      setSelectedImage(null);
+                    }}
+                    disabled={isLoading}
+                    className="flex-1 p-2 bg-gray-300 text-gray-800 rounded-lg hover:bg-gray-400 transition-colors disabled:opacity-50"
+                  >
                     Cancel
                   </button>
                 </div>
@@ -425,9 +636,9 @@ function App() {
           </div>
         )}
 
-        {/* Delete Confirmation Modal */}
+        {/* Responsive Delete Confirmation Modal */}
         {showDeleteModal && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
             <motion.div
               initial={{ scale: 0.9, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
@@ -436,10 +647,18 @@ function App() {
               <h2 className="text-xl font-semibold text-gray-800 mb-4">Confirm Delete</h2>
               <p className="text-gray-600 mb-6">Are you sure you want to delete this student?</p>
               <div className="flex gap-2">
-                <button onClick={() => handleDelete(showDeleteModal)} disabled={isLoading} className="flex-1 p-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors disabled:opacity-50">
+                <button
+                  onClick={() => handleDelete(showDeleteModal)}
+                  disabled={isLoading}
+                  className="flex-1 p-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors disabled:opacity-50"
+                >
                   Yes
                 </button>
-                <button onClick={() => setShowDeleteModal(null)} disabled={isLoading} className="flex-1 p-2 bg-gray-300 text-gray-800 rounded-lg hover:bg-gray-400 transition-colors disabled:opacity-50">
+                <button
+                  onClick={() => setShowDeleteModal(null)}
+                  disabled={isLoading}
+                  className="flex-1 p-2 bg-gray-300 text-gray-800 rounded-lg hover:bg-gray-400 transition-colors disabled:opacity-50"
+                >
                   No
                 </button>
               </div>
