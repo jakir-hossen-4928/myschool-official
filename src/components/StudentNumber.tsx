@@ -57,8 +57,31 @@ function App() {
   useEffect(() => {
     const loggedIn = localStorage.getItem('isLoggedIn') === 'true';
     setIsAuthenticated(loggedIn);
+
+    // Load saved display preferences or set all to true by default
+    const savedOptions = localStorage.getItem('displayOptions');
+    if (savedOptions) {
+      setDisplayOptions(JSON.parse(savedOptions));
+    } else {
+      setDisplayOptions({
+        showName: true,
+        showNumber: true,
+        showClass: true,
+        showDescription: true,
+        showEnglishName: true,
+        showFatherName: true,
+        showMotherName: true,
+        showPhoto: true
+      });
+    }
+
     if (loggedIn) fetchStudents();
   }, [currentPage, selectedClass]);
+
+  // Save display preferences whenever they change
+  useEffect(() => {
+    localStorage.setItem('displayOptions', JSON.stringify(displayOptions));
+  }, [displayOptions]);
 
   const fetchStudents = async () => {
     setIsLoading(true);
@@ -254,53 +277,28 @@ function App() {
     }
   };
 
-  const handleDownload = (student: Student) => {
+  const handlePhotoDownload = async (student: Student) => {
     if (!student.photoUrl) return;
 
-    const link = document.createElement('a');
-    link.href = student.photoUrl;
-    link.download = `${student.englishName}_${student.class}_passport.jpg`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    try {
+      const response = await fetch(student.photoUrl);
+      const blob = await response.blob();
+      const urlParts = student.photoUrl.split('.');
+      const extension = urlParts[urlParts.length - 1].toLowerCase();
+      const fileName = `${student.englishName || student.name}_${student.class}.${extension === 'png' || extension === 'jpg' || extension === 'jpeg' ? extension : 'jpg'}`;
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Error downloading photo:', error);
+      alert('Failed to download photo. Please try again.');
+    }
   };
-
- // Update this function in your code
-const handlePhotoDownload = async (student: Student) => {
-  if (!student.photoUrl) return;
-
-  try {
-    // Fetch the image
-    const response = await fetch(student.photoUrl);
-    const blob = await response.blob();
-
-    // Get the file extension from the URL
-    const urlParts = student.photoUrl.split('.');
-    const extension = urlParts[urlParts.length - 1].toLowerCase();
-
-    // Create filename using English name and class
-    const fileName = `${student.englishName}_${student.class}.${extension === 'png' || extension === 'jpg' || extension === 'jpeg' ? extension : 'jpg'}`;
-
-    // Create a temporary URL for the blob
-    const url = window.URL.createObjectURL(blob);
-
-    // Create a temporary anchor element
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = fileName;
-
-    // Trigger the download
-    document.body.appendChild(link);
-    link.click();
-
-    // Clean up
-    document.body.removeChild(link);
-    window.URL.revokeObjectURL(url);
-  } catch (error) {
-    console.error('Error downloading photo:', error);
-    alert('Failed to download photo. Please try again.');
-  }
-};
 
   const totalPages = Math.ceil(totalStudents / itemsPerPage);
 
@@ -366,7 +364,7 @@ const handlePhotoDownload = async (student: Student) => {
     <div className="min-h-screen bg-gray-50 p-4 md:p-6">
       <div className="max-w-7xl mx-auto">
         <div className="flex flex-col sm:flex-row justify-between items-center mb-6 gap-4">
-          <h1 className="text-2xl font-semibold text-gray-800">Student Management</h1>
+          <h1 className="text-2xl font-semibold text-gray-800">MySchool Student Management</h1>
           <div className="flex gap-3">
             <button onClick={() => { setEditStudent({ name: '', number: '', class: '', description: '', englishName: '', motherName: '', fatherName: '' }); setShowModal(true); }} className="flex items-center p-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors">
               <Plus size={20} /> <span className="ml-1">Add</span>
@@ -399,112 +397,133 @@ const handlePhotoDownload = async (student: Student) => {
         </div>
 
         <div className="bg-white p-4 rounded-xl shadow-md mb-6">
-  <button
-    onClick={() => setIsExpanded(!isExpanded)}
-    className="w-full flex justify-between items-center hover:bg-gray-50 rounded-lg p-2 -m-2"
-  >
-    <h3 className="text-lg font-semibold text-gray-800">Display Options</h3>
-    <svg
-      className={`w-5 h-5 transform transition-transform ${isExpanded ? 'rotate-180' : ''}`}
-      fill="none"
-      stroke="currentColor"
-      viewBox="0 0 24 24"
-    >
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-    </svg>
-  </button>
+          <button
+            onClick={() => setIsExpanded(!isExpanded)}
+            className="w-full flex justify-between items-center hover:bg-gray-50 rounded-lg p-2 -m-2"
+          >
+            <h3 className="text-lg font-semibold text-gray-800">Display Options</h3>
+            <svg
+              className={`w-5 h-5 transform transition-transform ${isExpanded ? 'rotate-180' : ''}`}
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
 
-  {isExpanded && (
-    <div className="mt-4 animate-slideDown">
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-        {Object.entries(displayOptions).map(([key, value]) => (
-          <label key={key} className="flex items-center gap-2 p-2 rounded-lg hover:bg-gray-100 transition-colors">
-            <input
-              type="checkbox"
-              checked={value}
-              onChange={e => setDisplayOptions(prev => ({ ...prev, [key]: e.target.checked }))}
-              className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
-            />
-            <span className="text-sm capitalize">
-              {key.replace('show', '').replace(/([A-Z])/g, ' $1').trim()}
-            </span>
-          </label>
-        ))}
-      </div>
-    </div>
-  )}
-</div>
-
-        <motion.div layout className="bg-white rounded-xl shadow-md overflow-hidden relative">
-          {isLoading && (
-            <div className="absolute inset-0 bg-gray-100 bg-opacity-75 flex items-center justify-center">
-              <motion.div
-                animate={{ rotate: 360 }}
-                transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
-                className="w-8 h-8 border-4 border-t-blue-500 border-gray-300 rounded-full"
-              />
+          {isExpanded && (
+            <div className="mt-4 animate-slideDown">
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                {Object.entries(displayOptions).map(([key, value]) => (
+                  <label key={key} className="flex items-center gap-2 p-2 rounded-lg hover:bg-gray-100 transition-colors">
+                    <input
+                      type="checkbox"
+                      checked={value}
+                      onChange={e => setDisplayOptions(prev => ({ ...prev, [key]: e.target.checked }))}
+                      className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
+                    />
+                    <span className="text-sm capitalize">
+                      {key.replace('show', '').replace(/([A-Z])/g, ' $1').trim()}
+                    </span>
+                  </label>
+                ))}
+              </div>
             </div>
           )}
-          <table className="w-full text-sm md:text-base">
-            <thead>
-              <tr className="bg-gray-100 text-gray-700">
-                {displayOptions.showName && <th className="p-3 text-left">Name</th>}
-                {displayOptions.showClass && <th className="p-3 text-left">Class</th>}
-                {displayOptions.showNumber && <th className="p-3 text-left">Number</th>}
-                {displayOptions.showDescription && <th className="p-3 text-left">Description</th>}
-                {displayOptions.showEnglishName && <th className="p-3 text-left">English Name</th>}
-                {displayOptions.showFatherName && <th className="p-3 text-left">Father's Name</th>}
-                {displayOptions.showMotherName && <th className="p-3 text-left">Mother's Name</th>}
-                {displayOptions.showPhoto && <th className="p-3 text-left">Photo</th>}
-                <th className="p-3 text-left">Actions</th>
-              </tr>
-            </thead>
-            <AnimatePresence>
-              <tbody>
-                {students.map(student => (
-                  <motion.tr
-                    key={student.$id}
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
-                    className="border-b hover:bg-gray-50 transition-colors"
-                  >
-                    {displayOptions.showName && <td className="p-3">{student.name}</td>}
-                    {displayOptions.showClass && <td className="p-3">{student.class}</td>}
-                    {displayOptions.showNumber && <td className="p-3">{student.number}</td>}
-                    {displayOptions.showDescription && <td className="p-3">{student.description}</td>}
-                    {displayOptions.showEnglishName && <td className="p-3">{student.englishName}</td>}
-                    {displayOptions.showFatherName && <td className="p-3">{student.fatherName}</td>}
-                    {displayOptions.showMotherName && <td className="p-3">{student.motherName}</td>}
-                    {displayOptions.showPhoto && (
-                      <td className="p-3">
-                        {student.photoUrl && (
-                          <img src={student.photoUrl} alt="passport" className="w-12 h-12 object-cover rounded" />
-                        )}
-                      </td>
+        </div>
+
+        <motion.div
+  layout
+  className="bg-white rounded-xl shadow-md overflow-x-auto relative"
+>
+  {isLoading && (
+    <div className="absolute inset-0 bg-gray-100 bg-opacity-75 flex items-center justify-center">
+      <motion.div
+        animate={{ rotate: 360 }}
+        transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
+        className="w-8 h-8 border-4 border-t-blue-500 border-gray-300 rounded-full"
+      />
+    </div>
+  )}
+  <div className="w-full overflow-x-auto">
+    <table className="w-full text-sm md:text-base">
+      <thead>
+        <tr className="bg-gray-100 text-gray-700">
+          <th className="p-3 text-left">Name</th>
+          <th className="p-3 text-left whitespace-nowrap">Class</th>
+          <th className="p-3 text-left whitespace-nowrap">Number</th>
+          {displayOptions.showDescription && <th className="p-3 text-left whitespace-nowrap">Description</th>}
+          {displayOptions.showEnglishName && <th className="p-3 text-left whitespace-nowrap">English Name</th>}
+          {displayOptions.showFatherName && <th className="p-3 text-left whitespace-nowrap">Father's Name</th>}
+          {displayOptions.showMotherName && <th className="p-3 text-left whitespace-nowrap">Mother's Name</th>}
+          {displayOptions.showPhoto && <th className="p-3 text-left whitespace-nowrap">Photo</th>}
+          <th className="p-3 text-left whitespace-nowrap sticky right-0 bg-gray-100">Actions</th>
+        </tr>
+      </thead>
+      <AnimatePresence>
+        <tbody>
+          {students.map(student => {
+            // Function to format the number by removing '88' prefix if present
+            const formatNumber = (number: string) => {
+              return number.startsWith('88') ? number.slice(2) : number;
+            };
+
+            return (
+              <motion.tr
+                key={student.$id}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="border-b hover:bg-gray-50 transition-colors"
+              >
+                <td className="p-3">{student.name}</td>
+                <td className="p-3 whitespace-nowrap">{student.class}</td>
+                <td className="p-3 whitespace-nowrap">{formatNumber(student.number)}</td>
+                {displayOptions.showDescription && <td className="p-3 whitespace-nowrap">{student.description}</td>}
+                {displayOptions.showEnglishName && <td className="p-3 whitespace-nowrap">{student.englishName}</td>}
+                {displayOptions.showFatherName && <td className="p-3 whitespace-nowrap">{student.fatherName}</td>}
+                {displayOptions.showMotherName && <td className="p-3 whitespace-nowrap">{student.motherName}</td>}
+                {displayOptions.showPhoto && (
+                  <td className="p-3 whitespace-nowrap">
+                    {student.photoUrl && (
+                      <img src={student.photoUrl} alt="passport" className="w-12 h-12 object-cover rounded" />
                     )}
-                    <td className="p-3 flex gap-2">
-                      <button onClick={() => { setEditStudent(student); setShowModal(true); }} className="text-blue-500 hover:text-blue-700">
-                        <Edit size={20} />
-                      </button>
-                      <button onClick={() => setShowDeleteModal(student.$id!)} className="text-red-500 hover:text-red-700">
-                        <Trash size={20} />
-                      </button>
-                      {student.photoUrl && (
-                        <button onClick={() => handlePhotoDownload(student)} className="text-green-500 hover:text-green-700">
-                          <Download size={20} />
-                        </button>
-                      )}
-                    </td>
-                  </motion.tr>
-                ))}
-              </tbody>
-            </AnimatePresence>
-          </table>
-          {students.length === 0 && !isLoading && (
-            <div className="p-4 text-center text-gray-500">No students found</div>
-          )}
-        </motion.div>
+                  </td>
+                )}
+                <td className="p-3 flex gap-2 whitespace-nowrap sticky right-0 bg-white shadow-[inset_8px_0_8px_-8px_rgba(0,0,0,0.1)]">
+                  <button
+                    onClick={() => { setEditStudent(student); setShowModal(true); }}
+                    className="text-blue-500 hover:text-blue-700"
+                  >
+                    <Edit size={20} />
+                  </button>
+                  <button
+                    onClick={() => setShowDeleteModal(student.$id!)}
+                    className="text-red-500 hover:text-red-700"
+                  >
+                    <Trash size={20} />
+                  </button>
+                  {student.photoUrl && (
+                    <button
+                      onClick={() => handlePhotoDownload(student)}
+                      className="text-green-500 hover:text-green-700"
+                    >
+                      <Download size={20} />
+                    </button>
+                  )}
+                </td>
+              </motion.tr>
+            );
+          })}
+        </tbody>
+      </AnimatePresence>
+    </table>
+  </div>
+  {students.length === 0 && !isLoading && (
+    <div className="p-4 text-center text-gray-500">No students found</div>
+  )}
+</motion.div>
 
         <div className="flex flex-col sm:flex-row justify-center sm:justify-between items-center mt-4 gap-4">
           <div className="flex justify-center gap-4 w-full sm:w-auto">
@@ -526,7 +545,6 @@ const handlePhotoDownload = async (student: Student) => {
           <span className="text-gray-700">Page {currentPage + 1} of {totalPages}</span>
         </div>
 
-        {/* Responsive Edit/Add Modal */}
         {showModal && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
             <motion.div
@@ -544,13 +562,13 @@ const handlePhotoDownload = async (student: Student) => {
                   className="w-full p-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400"
                   required
                 />
-                                <input
+                <input
                   type="text"
                   placeholder="English Name"
                   value={editStudent?.englishName || ''}
                   onChange={e => setEditStudent({ ...editStudent!, englishName: e.target.value })}
                   className="w-full p-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400"
-                  required
+
                 />
                 <input
                   type="text"
@@ -575,14 +593,13 @@ const handlePhotoDownload = async (student: Student) => {
                   onChange={e => setEditStudent({ ...editStudent!, description: e.target.value })}
                   className="w-full p-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400 min-h-[100px]"
                 />
-
                 <input
                   type="text"
                   placeholder="Father's Name"
                   value={editStudent?.fatherName || ''}
                   onChange={e => setEditStudent({ ...editStudent!, fatherName: e.target.value })}
                   className="w-full p-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400"
-                  required
+
                 />
                 <input
                   type="text"
@@ -590,7 +607,7 @@ const handlePhotoDownload = async (student: Student) => {
                   value={editStudent?.motherName || ''}
                   onChange={e => setEditStudent({ ...editStudent!, motherName: e.target.value })}
                   className="w-full p-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400"
-                  required
+                  
                 />
                 <div className="space-y-2">
                   <input
@@ -636,7 +653,6 @@ const handlePhotoDownload = async (student: Student) => {
           </div>
         )}
 
-        {/* Responsive Delete Confirmation Modal */}
         {showDeleteModal && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
             <motion.div
