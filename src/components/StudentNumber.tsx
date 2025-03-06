@@ -126,16 +126,15 @@ function App() {
     setIsLoading(true);
     try {
       const studentData = {
-        name: editStudent.name,
-        number: editStudent.number,
-        class: editStudent.class,
+        name: editStudent.name || '',
+        number: editStudent.number || '',
+        class: editStudent.class || '',
         description: editStudent.description || '',
-        englishName: editStudent.englishName,
-        motherName: editStudent.motherName,
-        fatherName: editStudent.fatherName,
+        englishName: editStudent.englishName || '',
+        motherName: editStudent.motherName || '',
+        fatherName: editStudent.fatherName || '',
         photoUrl: editStudent.photoUrl || ''
       };
-
       if (editStudent.$id) {
         await databases.updateDocument(
           '67740d6d001e6019b3b7',
@@ -451,12 +450,11 @@ function App() {
       <thead>
         <tr className="bg-gray-100 text-gray-700">
           <th className="p-3 text-left">Name</th>
-          <th className="p-3 text-left whitespace-nowrap">Class</th>
+          {displayOptions.showEnglishName && <th className="p-3 text-left whitespace-nowrap">English Name</th>}
+          {displayOptions.showMotherName && <th className="p-3 text-left whitespace-nowrap">Mother's Name</th>}
+          {displayOptions.showFatherName && <th className="p-3 text-left whitespace-nowrap">Father's Name</th>}
           <th className="p-3 text-left whitespace-nowrap">Number</th>
           {displayOptions.showDescription && <th className="p-3 text-left whitespace-nowrap">Description</th>}
-          {displayOptions.showEnglishName && <th className="p-3 text-left whitespace-nowrap">English Name</th>}
-          {displayOptions.showFatherName && <th className="p-3 text-left whitespace-nowrap">Father's Name</th>}
-          {displayOptions.showMotherName && <th className="p-3 text-left whitespace-nowrap">Mother's Name</th>}
           {displayOptions.showPhoto && <th className="p-3 text-left whitespace-nowrap">Photo</th>}
           <th className="p-3 text-left whitespace-nowrap sticky right-0 bg-gray-100">Actions</th>
         </tr>
@@ -478,12 +476,11 @@ function App() {
                 className="border-b hover:bg-gray-50 transition-colors"
               >
                 <td className="p-3">{student.name}</td>
-                <td className="p-3 whitespace-nowrap">{student.class}</td>
+                {displayOptions.showEnglishName && <td className="p-3 whitespace-nowrap">{student.englishName}</td>}
+                {displayOptions.showMotherName && <td className="p-3 whitespace-nowrap">{student.motherName}</td>}
+                {displayOptions.showFatherName && <td className="p-3 whitespace-nowrap">{student.fatherName}</td>}
                 <td className="p-3 whitespace-nowrap">{formatNumber(student.number)}</td>
                 {displayOptions.showDescription && <td className="p-3 whitespace-nowrap">{student.description}</td>}
-                {displayOptions.showEnglishName && <td className="p-3 whitespace-nowrap">{student.englishName}</td>}
-                {displayOptions.showFatherName && <td className="p-3 whitespace-nowrap">{student.fatherName}</td>}
-                {displayOptions.showMotherName && <td className="p-3 whitespace-nowrap">{student.motherName}</td>}
                 {displayOptions.showPhoto && (
                   <td className="p-3 whitespace-nowrap">
                     {student.photoUrl && (
@@ -607,7 +604,7 @@ function App() {
                   value={editStudent?.motherName || ''}
                   onChange={e => setEditStudent({ ...editStudent!, motherName: e.target.value })}
                   className="w-full p-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400"
-                  
+
                 />
                 <div className="space-y-2">
                   <input
