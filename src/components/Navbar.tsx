@@ -1,70 +1,109 @@
 import { Menu, X } from "lucide-react";
 import { useState } from "react";
 import { Link } from "react-router-dom";
+import { motion, AnimatePresence } from "framer-motion";
 
 const Navbar = () => {
   const [isOpen, setIsOpen] = useState(false);
 
+  // Animation variants
+  const navVariants = {
+    hidden: { opacity: 0, y: -20 },
+    visible: {
+      opacity: 1,
+      y: 0,
+      transition: {
+        duration: 0.6,
+        ease: "easeOut",
+      },
+    },
+  };
+
+  const linkVariants = {
+    hover: {
+      scale: 1.05,
+      color: "#e5e7eb",
+      transition: {
+        duration: 0.2,
+      },
+    },
+    tap: {
+      scale: 0.95,
+    },
+  };
+
+  const mobileMenuVariants = {
+    hidden: {
+      opacity: 0,
+      height: 0,
+    },
+    visible: {
+      opacity: 1,
+      height: "auto",
+      transition: {
+        duration: 0.3,
+        ease: "easeInOut",
+        when: "beforeChildren",
+        staggerChildren: 0.1,
+      },
+    },
+  };
+
+  const mobileItemVariants = {
+    hidden: { opacity: 0, x: -20 },
+    visible: { opacity: 1, x: 0 },
+  };
+
   return (
-    <nav className="bg-gradient-to-r from-purple-600 to-blue-600 shadow-lg">
+    <motion.nav
+      variants={navVariants}
+      initial="hidden"
+      animate="visible"
+      className="bg-gradient-to-r from-purple-700 via-indigo-600 to-blue-600 shadow-xl sticky top-0 z-50"
+    >
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex justify-between h-16">
+        <div className="flex justify-between items-center h-16 lg:h-20">
           {/* Logo Section */}
-          <div className="flex-shrink-0 flex items-center space-x-2">
+          <motion.div
+            className="flex-shrink-0 flex items-center space-x-3"
+            whileHover={{ scale: 1.05 }}
+          >
             <img
               src="/my-school-logo.jpg"
               alt="School Logo"
-              className="h-10 w-10 object-cover rounded-full transform transition-transform hover:scale-110 hover:shadow-lg"
+              className="h-12 w-12 object-cover rounded-full border-2 border-white/20 shadow-md"
             />
-            <span className="text-2xl font-bold text-white font-sans hover:text-gray-200 transition-colors">
+            <span className="text-2xl lg:text-3xl font-extrabold text-white tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-white to-gray-200">
               MySchool-মাইস্কুল
             </span>
-          </div>
+          </motion.div>
 
           {/* Desktop Navigation Links */}
-          <div className="hidden md:flex items-center space-x-8">
-            <Link
-              to="/"
-              className="text-white hover:text-gray-200 transition-colors relative group"
-            >
-              Home
-              <span className="absolute bottom-0 left-0 w-0 h-0.5 bg-white transition-all group-hover:w-full"></span>
-            </Link>
-            <Link
-              to="/submit-student-data"
-              className="text-white hover:text-gray-200 transition-colors relative group"
-            >
-              Submit Data
-              <span className="absolute bottom-0 left-0 w-0 h-0.5 bg-white transition-all group-hover:w-full"></span>
-            </Link>
-            <Link
-              to="/admin"
-              className="text-white hover:text-gray-200 transition-colors relative group"
-            >
-             Admin
-              <span className="absolute bottom-0 left-0 w-0 h-0.5 bg-white transition-all group-hover:w-full"></span>
-            </Link>
-            <Link
-              to="#about"
-              className="text-white hover:text-gray-200 transition-colors relative group"
-            >
-              About
-              <span className="absolute bottom-0 left-0 w-0 h-0.5 bg-white transition-all group-hover:w-full"></span>
-            </Link>
-            <Link
-              to="#contact"
-              className="text-white hover:text-gray-200 transition-colors relative group"
-            >
-              Contact
-              <span className="absolute bottom-0 left-0 w-0 h-0.5 bg-white transition-all group-hover:w-full"></span>
-            </Link>
+          <div className="hidden md:flex items-center space-x-10">
+            {["Home", "Submit Data", "Sign-In", "About", "Contact"].map(
+              (item) => (
+                <motion.div key={item} variants={linkVariants} whileHover="hover" whileTap="tap">
+                  <Link
+                    to={item === "Home" ? "/" : item === "Submit Data" ? "/submit-student-data" : item === "Sign-In" ? "/admin" : `#${item.toLowerCase()}`}
+                    className="text-white text-lg font-medium relative px-1 py-2 group"
+                  >
+                    {item}
+                    <span className="absolute inset-x-0 bottom-0 h-0.5 bg-gradient-to-r from-white/0 via-white to-white/0 transform scale-x-0 group-hover:scale-x-100 transition-transform origin-center"></span>
+                  </Link>
+                </motion.div>
+              )
+            )}
           </div>
 
           {/* Mobile Menu Button */}
-          <div className="md:hidden flex items-center">
+          <motion.div
+            className="md:hidden flex items-center"
+            whileHover={{ scale: 1.1 }}
+            whileTap={{ scale: 0.95 }}
+          >
             <button
               onClick={() => setIsOpen(!isOpen)}
-              className="text-white hover:text-gray-200 focus:outline-none"
+              className="text-white p-2 rounded-full hover:bg-white/10 focus:outline-none transition-colors"
               aria-label="Toggle menu"
             >
               {isOpen ? (
@@ -73,49 +112,39 @@ const Navbar = () => {
                 <Menu className="h-6 w-6" />
               )}
             </button>
-          </div>
+          </motion.div>
         </div>
       </div>
 
       {/* Mobile Menu */}
-      {isOpen && (
-        <div className="md:hidden bg-white/10 backdrop-blur-sm">
-          <div className="px-2 pt-2 pb-3 space-y-1 sm:px-3">
-            <Link
-              to="/"
-              className="block px-3 py-2 text-white hover:bg-white/20 rounded-md transition-colors"
-            >
-              Home
-            </Link>
-            <Link
-              to="/submit-student-data"
-              className="block px-3 py-2 text-white hover:bg-white/20 rounded-md transition-colors"
-            >
-              Submit Data
-            </Link>
-            <Link
-              to="/admin"
-              className="text-white hover:text-gray-200 transition-colors relative group"
-            >
-             Admin
-              <span className="absolute bottom-0 left-0 w-0 h-0.5 bg-white transition-all group-hover:w-full"></span>
-            </Link>
-            <Link
-              to="#about"
-              className="block px-3 py-2 text-white hover:bg-white/20 rounded-md transition-colors"
-            >
-              About
-            </Link>
-            <Link
-              to="#contact"
-              className="block px-3 py-2 text-white hover:bg-white/20 rounded-md transition-colors"
-            >
-              Contact
-            </Link>
-          </div>
-        </div>
-      )}
-    </nav>
+      <AnimatePresence>
+        {isOpen && (
+          <motion.div
+            variants={mobileMenuVariants}
+            initial="hidden"
+            animate="visible"
+            exit="hidden"
+            className="md:hidden bg-gradient-to-b from-white/10 to-transparent backdrop-blur-md border-t border-white/10"
+          >
+            <div className="px-4 pt-4 pb-6 space-y-2">
+              {["Home", "Submit Data", "Sign-In", "About", "Contact"].map(
+                (item) => (
+                  <motion.div key={item} variants={mobileItemVariants}>
+                    <Link
+                      to={item === "Home" ? "/" : item === "Submit Data" ? "/submit-student-data" : item === "Sign-In" ? "/admin" : `#${item.toLowerCase()}`}
+                      onClick={() => setIsOpen(false)}
+                      className="block px-4 py-3 text-white text-lg font-medium rounded-lg hover:bg-white/20 hover:shadow-md transition-all duration-200"
+                    >
+                      {item}
+                    </Link>
+                  </motion.div>
+                )
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </motion.nav>
   );
 };
 

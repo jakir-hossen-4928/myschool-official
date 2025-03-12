@@ -1,0 +1,30 @@
+// src/components/ProtectedRoute.tsx
+import { ReactNode, useEffect, useState } from "react";
+import { Navigate } from "react-router-dom";
+import { isAuthenticated } from "../lib/auth";
+
+interface ProtectedRouteProps {
+  children: ReactNode;
+}
+
+export const ProtectedRoute = ({ children }: ProtectedRouteProps) => {
+  const [auth, setAuth] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    const checkAuth = async () => {
+      const authenticated = await isAuthenticated();
+      setAuth(authenticated);
+    };
+    checkAuth();
+  }, []);
+
+  if (auth === null) {
+    return <div>Loading...</div>; // Show loading while checking auth
+  }
+
+  if (!auth) {
+    return <Navigate to="/admin-login" replace />;
+  }
+
+  return <>{children}</>;
+};
