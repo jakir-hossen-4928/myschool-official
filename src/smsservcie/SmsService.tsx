@@ -1,11 +1,18 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { databases, APPWRITE_DATABASE_ID, APPWRITE_COLLECTION_ID } from '../lib/appwrite';
-import { Query } from 'appwrite';
 import { motion, AnimatePresence } from 'framer-motion';
 import { FiInfo, FiClipboard, FiSend, FiUsers, FiDollarSign, FiWifi, FiX } from 'react-icons/fi';
+import 'jspdf-autotable';
+import axios from 'axios';
+import { toast } from 'sonner';
+import { AlertDialog } from '@/components/ui/alert-dialog';
+import Loading from '../components/loader/Loading';
+
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
+
+// const BACKEND_URL = 'http://localhost:5000'; // Override for local testing
 
 interface Student {
-  $id?: string;
+  id?: string;
   name: string;
   number: string;
   class: string;
@@ -69,42 +76,31 @@ const SMSService = () => {
   const [totalStudents, setTotalStudents] = useState(0);
   const [showTutorial, setShowTutorial] = useState(false);
 
-  const API_KEY = import.meta.env.VITE_BULKSMSBD_API_KEY;
-  const SENDER_ID = import.meta.env.VITE_BULKSMSBD_SENDER_ID;
-  const BASE_URL = import.meta.env.VITE_BULKSMSBD_URL;
-  const BACKEND_URL = import.meta.env.VITE_BACKEND_URL;
-
   const log = (message: string) => {
     console.log(`[SMSService] ${message}`);
     setLogs(prev => [...prev, `${new Date().toLocaleTimeString()} - ${message}`].slice(-10));
   };
 
-  // Insert placeholder into message
   const insertPlaceholder = (placeholder: string) => {
     setMessage(prev => `${prev}${placeholder} `);
   };
 
-  // Initial data fetch
   useEffect(() => {
     const fetchInitialData = async () => {
       setIsLoading(true);
       log('Fetching initial data...');
       try {
-        // Fetch IP address
         const ipResponse = await fetch('https://api.ipify.org?format=json');
         const ipData = await ipResponse.json();
         setIpAddress(ipData.ip);
 
-        // Fetch balance from backend
-        const balanceResponse = await fetch(`${BACKEND_URL}/getBalance`);
-        const balanceData = await balanceResponse.json();
-
-        if (balanceResponse.ok && balanceData.balance !== undefined) {
+        const balanceResponse = await axios.get(`${BACKEND_URL}/getBalance`);
+        if (balanceResponse.status === 200 && balanceResponse.data.balance !== undefined) {
           setApiStatus('connected');
-          setAccountBalance(parseFloat(balanceData.balance));
+          setAccountBalance(parseFloat(balanceResponse.data.balance));
         } else {
           setApiStatus('error');
-          log(`SMS provider error: ${balanceData.error || 'Unknown error'}`);
+          log(`SMS provider error: ${balanceResponse.data.error || 'Unknown error'}`);
         }
       } catch (error) {
         setApiStatus('error');
@@ -114,32 +110,34 @@ const SMSService = () => {
       }
     };
     fetchInitialData();
-  }, [BACKEND_URL]);
+  }, []);
 
   const fetchStudentsByClass = useCallback(async () => {
     if (!selectedClass) return;
     setIsLoading(true);
     log(`Fetching students for class: ${selectedClass}`);
     try {
-      const totalResponse = await databases.listDocuments(
-        APPWRITE_DATABASE_ID,
-        APPWRITE_COLLECTION_ID,
-        [Query.equal('class', selectedClass)]
-      );
-      setTotalStudents(totalResponse.total);
-
-      const response = await databases.listDocuments(
-        APPWRITE_DATABASE_ID,
-        APPWRITE_COLLECTION_ID,
-        [
-          Query.equal('class', selectedClass),
-          Query.limit(itemsPerPage),
-          Query.offset((currentPage - 1) * itemsPerPage),
-          Query.orderAsc('name')
-        ]
-      );
-      setStudents(response.documents as Student[]);
-      log(`Fetched ${response.documents.length} of ${totalResponse.total} students`);
+      const response = await axios.get(`${BACKEND_URL}/students`, {
+        params: {
+          page: currentPage - 1,
+          limit: itemsPerPage,
+          class: selectedClass,
+        },
+      });
+      const { students: fetchedStudents, total } = response.data;
+      setStudents(fetchedStudents.map((s: any) => ({
+        id: s.id,
+        name: s.name,
+        number: s.number,
+        class: s.class,
+        description: s.description,
+        englishName: s.englishName,
+        motherName: s.motherName,
+        fatherName: s.fatherName,
+        photoUrl: s.photoUrl,
+      })));
+      setTotalStudents(total);
+      log(`Fetched ${fetchedStudents.length} of ${total} students`);
     } catch (error) {
       log(`Error fetching students: ${error instanceof Error ? error.message : String(error)}`);
     } finally {
@@ -151,7 +149,6 @@ const SMSService = () => {
     fetchStudentsByClass();
   }, [fetchStudentsByClass]);
 
-
   const filteredStudents = students.filter(student =>
     student.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     student.number.includes(searchTerm)
@@ -162,6 +159,7 @@ const SMSService = () => {
       prev.includes(number) ? prev.filter(n => n !== number) : [...prev, number]
     );
   };
+
   const generatePersonalizedMessage = (student: Student) => {
     let personalizedMessage = message;
     personalizedMessage = personalizedMessage.replace('{student_name}', student.name);
@@ -174,7 +172,7 @@ const SMSService = () => {
 
   useEffect(() => {
     const calculateCost = () => {
-      const gsm7BitExChars = /^[A-Za-z0-9 \r\n@£$¥èéùìòÇØøÅåΔ_ΦΓΛΩΠΨΣΘΞÆæßÉ!\"#$%&'()*+,\-./:;<=>?¡ÄÖÑÜ§¿äöñüà^{}\[~\]|€]+$/;
+      const gsm7BitExChars = /^[A-Za-z0-9 \r\n@£$¥èéùìòÇØøÅåΔ_ΦΓΛΩΠΨΣΘΞÆæßÉ!\"#$%&'()*+,\-./:;<=>?-siÄÖÑÜ§¿äöñüà^{}\[~\]|€]+$/;
 
       const maxLength = selectedNumbers.reduce((max, number) => {
         const student = students.find(s => s.number === number);
@@ -184,7 +182,7 @@ const SMSService = () => {
           return Math.max(max, isGSM7 ? 160 : 70);
         }
         return max;
-      }, 160); // Default to GSM-7 length if no students selected
+      }, 160);
 
       const maxMessageLength = selectedNumbers.reduce((max, number) => {
         const student = students.find(s => s.number === number);
@@ -200,11 +198,11 @@ const SMSService = () => {
       setTotalCost(cost);
     };
     calculateCost();
-  }, [message, selectedNumbers, smsRate, students, generatePersonalizedMessage]);
+  }, [message, selectedNumbers, smsRate, students]);
 
   const sendSMS = async () => {
     if (!selectedNumbers.length || !message) {
-      alert('Please select recipients and enter a message!');
+      toast('Please select recipients and enter a message!');
       return;
     }
     if (totalCost > (accountBalance || 0)) {
@@ -218,17 +216,11 @@ const SMSService = () => {
         const student = students.find(s => s.number === number);
         if (!student) return;
         const personalizedMessage = generatePersonalizedMessage(student);
-        const response = await fetch(`${BACKEND_URL}/sendSMS`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            api_key: API_KEY,
-            senderid: SENDER_ID,
-            number: number,
-            message: personalizedMessage,
-          }),
+        const response = await axios.post(`${BACKEND_URL}/sendSMS`, {
+          number,
+          message: personalizedMessage,
         });
-        return response.json();
+        return response.data;
       });
 
       const results = await Promise.all(promises);
@@ -238,7 +230,7 @@ const SMSService = () => {
         alert('All SMS sent successfully!');
         setMessage('');
         setSelectedNumbers([]);
-        setAccountBalance(prev => prev ? prev - totalCost : null);
+        setAccountBalance(prev => (prev ? prev - totalCost : null));
         log('All SMS sent successfully');
       } else {
         const errors = results.map((result, index) =>
@@ -257,12 +249,11 @@ const SMSService = () => {
     }
   };
 
-  // UI Components
   const glassStyle = {
     background: 'rgba(255, 255, 255, 0.9)',
     backdropFilter: 'blur(10px)',
     borderRadius: '16px',
-    border: '1px solid rgba(255, 255, 255, 0.3)'
+    border: '1px solid rgba(255, 255, 255, 0.3)',
   };
 
   const AnimatedGradient = () => (
@@ -322,18 +313,17 @@ const SMSService = () => {
   const pasteFromClipboard = async () => {
     try {
       const text = await navigator.clipboard.readText();
-      setMessage(prev => prev + text); // Appends the pasted text to existing message
+      setMessage(prev => prev + text);
     } catch (error) {
       alert('Failed to paste from clipboard.');
       log(`Clipboard paste error: ${error instanceof Error ? error.message : String(error)}`);
     }
   };
 
-
   return (
     <div className="relative min-h-screen">
       <AnimatedGradient />
-
+      {isLoading && <Loading />} {/* Add Loading component here */}
       {showTutorial && <TutorialOverlay />}
 
       <motion.div
@@ -418,8 +408,8 @@ const SMSService = () => {
                 )}
               </span>
               <span className="bg-purple-100 px-2 py-1 rounded">
-      Total Cost: {totalCost.toFixed(2)} টাকা
-    </span>
+                Total Cost: {totalCost.toFixed(2)} টাকা
+              </span>
             </div>
             <button
               onClick={pasteFromClipboard}
@@ -441,21 +431,144 @@ const SMSService = () => {
             <h3 className="text-lg md:text-xl font-bold mb-4 flex items-center gap-2">
               <FiUsers className="text-green-500" /> Select Class
             </h3>
-            <select
-              className="w-full p-3 border rounded-xl bg-white/50 focus:ring-2 focus:ring-green-300"
-              value={selectedClass}
-              onChange={(e) => {
-                setSelectedClass(e.target.value);
-                setCurrentPage(1);
-                setSelectedNumbers([]);
-              }}
-              disabled={isLoading}
-            >
-              <option value="">Choose a class...</option>
-              {CLASS_OPTIONS.map(cls => (
-                <option key={cls} value={cls}>{cls}</option>
-              ))}
-            </select>
+            <div className="flex flex-col md:flex-row gap-4 items-start md:items-center">
+              <select
+                className="w-full md:w-2/3 p-3 border rounded-xl bg-white/50 focus:ring-2 focus:ring-green-300"
+                value={selectedClass}
+                onChange={(e) => {
+                  setSelectedClass(e.target.value);
+                  setCurrentPage(1);
+                  setSelectedNumbers([]);
+                }}
+                disabled={isLoading}
+              >
+                <option value="">Choose a class...</option>
+                {CLASS_OPTIONS.map(cls => (
+                  <option key={cls} value={cls}>{cls}</option>
+                ))}
+              </select>
+              <div className="flex gap-2 w-full md:w-1/3">
+                <button
+                  onClick={async () => {
+                    if (!selectedClass) {
+                      alert('Please select a class first!');
+                      return;
+                    }
+                    try {
+                      const response = await axios.get(`${BACKEND_URL}/students/export-csv`, {
+                        params: { class: selectedClass },
+                        responseType: 'blob',
+                      });
+                      const csvUrl = URL.createObjectURL(response.data);
+                      const csvLink = document.createElement('a');
+                      csvLink.href = csvUrl;
+                      csvLink.download = `${selectedClass}_students.csv`;
+                      csvLink.click();
+                      URL.revokeObjectURL(csvUrl);
+                      log(`Exported ${selectedClass} students to CSV`);
+                    } catch (error) {
+                      log(`CSV Export error: ${error instanceof Error ? error.message : String(error)}`);
+                      alert('Failed to export CSV');
+                    }
+                  }}
+                  className="flex-1 px-3 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 disabled:opacity-50 text-sm"
+                  disabled={isLoading}
+                >
+                  Export CSV
+                </button>
+                <button
+                  onClick={async () => {
+                    if (!selectedClass) {
+                      alert('Please select a class first!');
+                      return;
+                    }
+                    try {
+                      const response = await axios.get(`${BACKEND_URL}/students`, {
+                        params: { class: selectedClass },
+                      });
+                      const studentsData = response.data.students as Student[];
+                      const totalStudents = response.data.total;
+                      const exportDate = new Date().toLocaleDateString();
+
+                      const printWindow = window.open('', '_blank');
+                      if (printWindow) {
+                        printWindow.document.write(`
+                          <html>
+                            <head>
+                              <title>MySchool - ${selectedClass} - Students</title>
+                              <style>
+                                @media print { @page { margin: 2cm; } }
+                                body { font-family: Arial, sans-serif; margin: 0; padding: 20px; color: #333; }
+                                .container { max-width: 1200px; margin: 0 auto; }
+                                .header { text-align: center; margin-bottom: 30px; border-bottom: 2px solid #3498db; padding-bottom: 15px; }
+                                .header h1 { color: #2c3e50; margin: 0; font-size: 28px; }
+                                .stats { background: #f8f9fa; padding: 15px; border-radius: 8px; margin-bottom: 20px; display: flex; justify-content: space-between; font-size: 14px; }
+                                table { width: 100%; border-collapse: collapse; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+                                th, td { border: 1px solid #ddd; padding: 12px; text-align: left; font-size: 14px; }
+                                th { background-color: #3498db; color: white; font-weight: bold; }
+                                tr:nth-child(even) { background-color: #f9f9f9; }
+                                tr:hover { background-color: #f1f1f1; }
+                                img { max-width: 100px; height: auto; border-radius: 4px; display: block; }
+                                .footer { margin-top: 20px; text-align: center; color: #777; font-size: 12px; }
+                                @media (max-width: 768px) { table, th, td { font-size: 12px; padding: 8px; } img { max-width: 60px; } }
+                              </style>
+                            </head>
+                            <body>
+                              <div class="container">
+                                <div class="header">
+                                  <h1>MySchool - ${selectedClass} - Students</h1>
+                                </div>
+                                <div class="stats">
+                                  <span>Total Students: ${totalStudents}</span>
+                                  <span>Exported on: ${exportDate}</span>
+                                </div>
+                                <table>
+                                  <tr>
+                                    <th>Name</th>
+                                    <th>English Name</th>
+                                    <th>Number</th>
+                                    <th>Class</th>
+                                    <th>Description</th>
+                                    <th>Mother Name</th>
+                                    <th>Father Name</th>
+                                    <th>Photo</th>
+                                  </tr>
+                                  ${studentsData.map(student => `
+                                    <tr>
+                                      <td>${student.name}</td>
+                                      <td>${student.englishName}</td>
+                                      <td>${student.number}</td>
+                                      <td>${student.class}</td>
+                                      <td>${student.description || '-'}</td>
+                                      <td>${student.motherName}</td>
+                                      <td>${student.fatherName}</td>
+                                      <td>${student.photoUrl ? `<img src="${student.photoUrl}" alt="${student.name}'s photo" onerror="this.style.display='none';this.nextSibling.style.display='block'" /><span style="display:none">Image not available</span>` : 'No photo'}</td>
+                                    </tr>
+                                  `).join('')}
+                                </table>
+                                <div class="footer">
+                                  Generated by MySchool Official Website • https://myschool-offical.netlify.app
+                                </div>
+                              </div>
+                            </body>
+                          </html>
+                        `);
+                        printWindow.document.close();
+                        printWindow.print();
+                        log(`Exported ${selectedClass} students to PDF`);
+                      }
+                    } catch (error) {
+                      log(`PDF Export error: ${error instanceof Error ? error.message : String(error)}`);
+                      alert('Failed to export PDF');
+                    }
+                  }}
+                  className="flex-1 px-3 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50 text-sm"
+                  disabled={isLoading}
+                >
+                  Export PDF
+                </button>
+              </div>
+            </div>
           </motion.div>
 
           <motion.div
@@ -503,7 +616,7 @@ const SMSService = () => {
                 ) : (
                   filteredStudents.map(student => (
                     <motion.label
-                      key={student.$id}
+                      key={student.id}
                       initial={{ x: -20, opacity: 0 }}
                       animate={{ x: 0, opacity: 1 }}
                       exit={{ x: 20, opacity: 0 }}
@@ -560,7 +673,6 @@ const SMSService = () => {
             </div>
           </motion.div>
         </div>
-
 
         {/* Send Button */}
         <motion.div

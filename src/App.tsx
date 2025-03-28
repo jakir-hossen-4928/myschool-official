@@ -17,6 +17,8 @@ import AdminOverview from "./components/AdminOverview";
 import TeachersPanel from "./teachers/TeachersPanel";
 import SmsService from "./smsservcie/SmsService"
 import MySchoolChat from "./myschool-chat/MySchoolChat";
+import Studnents from "./students/Studnents";
+import ContentGanarator from "./contentganarate/ContentGanarator";
 
 const queryClient = new QueryClient();
 
@@ -42,11 +44,15 @@ const App = () => (
             }
           >
             <Route index element={<AdminOverview />} />
-            <Route index path="/admin/student-menagement" element={<StudentNumber />} />
+
+            <Route index path="/admin/student-menagement" element={<Studnents />} />
+
+
             <Route index path="/admin/accounts&fund" element={<FundTracker />} />
             <Route index path="/admin/academic" element={<AcademicRoutine />} />
             <Route index path="/admin/staff" element={<TeachersPanel />} />
             <Route index path="/admin/sms-service" element={<SmsService />} />
+            <Route index path="/admin/content-ganarator" element={<ContentGanarator />} />
             <Route index path="/admin/myschool-ai" element={<MySchoolChat />} />
             {/* Add more admin routes here as needed */}
           </Route>

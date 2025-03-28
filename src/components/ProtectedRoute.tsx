@@ -2,6 +2,7 @@
 import { ReactNode, useEffect, useState } from "react";
 import { Navigate } from "react-router-dom";
 import { isAuthenticated } from "../lib/auth";
+import Loading from "./loader/Loading";
 
 interface ProtectedRouteProps {
   children: ReactNode;
@@ -19,7 +20,7 @@ export const ProtectedRoute = ({ children }: ProtectedRouteProps) => {
   }, []);
 
   if (auth === null) {
-    return <div>Loading...</div>; // Show loading while checking auth
+    return <Loading />;
   }
 
   if (!auth) {

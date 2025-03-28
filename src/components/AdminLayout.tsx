@@ -4,7 +4,7 @@ import { logout } from "../lib/appwrite";
 import { useNavigate } from "react-router-dom";
 import { useState, useEffect } from "react";
 import { Menu, X, User, School, BarChart, BookAIcon } from "lucide-react";
-import { FaSms } from "react-icons/fa";
+import { FaFilePdf, FaSms } from "react-icons/fa";
 import { RiRobot2Line } from 'react-icons/ri';
 
 
@@ -118,6 +118,14 @@ export const AdminLayout = () => {
             >
               <FaSms size={18} />
               <span className="text-sm font-medium">SMS Service</span>
+            </a>
+            <a
+              href="/admin/content-ganarator"
+              className="flex items-center gap-2 p-2 rounded-lg hover:bg-indigo-700/80 transition-colors"
+              onClick={() => setIsSidebarOpen(false)}
+            >
+              <FaFilePdf size={18} />
+              <span className="text-sm font-medium">Content Ganarator</span>
             </a>
             <a
               href="/admin/myschool-ai"

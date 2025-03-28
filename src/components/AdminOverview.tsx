@@ -1,5 +1,16 @@
 import React, { useState, useEffect } from 'react';
-import { studentOverview } from '../lib/appwrite';
+import { BarChart, PieChart, Pie, Bar, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '../components/ui/card';
+import { Badge } from '../components/ui/badge';
+import { ScrollArea } from '../components/ui/scroll-area';
+import { Skeleton } from '../components/ui/skeleton';
+import { Toaster } from '../components/ui/sonner';
+import { toast } from 'sonner';
+import { ArrowUp, ArrowDown, Users, BookOpen, Wallet, AlertCircle, Clock, Coins, LineChart } from 'lucide-react';
+import { Button } from '../components/ui/button';
+import Loading from './loader/Loading';
+
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
 
 const AdminOverview: React.FC = () => {
   const [stats, setStats] = useState<any>(null);
@@ -10,134 +21,321 @@ const AdminOverview: React.FC = () => {
     loadStats();
   }, []);
 
-  const loadStats = async () => {
+  const loadStats = async (retries = 3, delay = 2000) => {
     try {
       setLoading(true);
-      const overviewStats = await studentOverview();
-      setStats(overviewStats);
+      const response = await fetch(`${BACKEND_URL}/admin-overview`);
+      if (!response.ok) throw new Error(`Failed to fetch admin overview: ${response.statusText}`);
+      const { overview } = await response.json();
+      setStats(overview || {});
+      toast.success('Admin dashboard updated');
     } catch (err) {
+      if (retries > 0) {
+        await new Promise(resolve => setTimeout(resolve, delay));
+        return loadStats(retries - 1, delay);
+      }
       setError('Failed to load statistics');
-      console.error(err);
+      toast.error('Connection error. Please try again.');
     } finally {
       setLoading(false);
     }
   };
 
+  const chartColors = ['#3b82f6', '#10b981', '#8b5cf6', '#f59e0b', '#ef4444'];
+
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-100 to-gray-200">
-        <div className="animate-spin rounded-full h-16 w-16 border-t-4 border-blue-500"></div>
-      </div>
+     <Loading />
     );
   }
 
   if (error) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-100">
-        <div className="bg-red-100 text-red-700 p-4 rounded-lg">{error}</div>
+      <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50 gap-4">
+        <div className="bg-red-100 p-4 rounded-full">
+          <AlertCircle className="h-12 w-12 text-red-600" />
+        </div>
+        <h2 className="text-2xl font-semibold text-gray-800">{error}</h2>
+        <Button onClick={loadStats} className="gap-2">
+          <Clock className="w-4 h-4" /> Retry
+        </Button>
       </div>
     );
   }
 
+  // Data processing for charts
+  const classDistributionData = Object.entries(stats?.students?.classDistribution || {}).map(([name, value]) => ({
+    name,
+    value
+  }));
+
+  const subjectDistributionData = Object.entries(stats?.teachers?.subjectDistribution || {}).map(([name, value]) => ({
+    name,
+    value
+  }));
+
+  const financialData = [
+    { name: 'Income', value: stats?.transactions?.totalIncome || 0 },
+    { name: 'Expenses', value: stats?.transactions?.totalExpenses || 0 }
+  ];
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-100 to-gray-200 py-8 px-4 md:px-8">
-      <div className="max-w-7xl mx-auto">
-        
-
-        {/* Main Stats */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-10">
-          <StatCard title="Total Students" value={stats.totalStudents} color="bg-gradient-to-r from-blue-600 to-blue-400" icon="👩‍🎓" />
-          <StatCard title="Missing Photos" value={stats.missingFields.photoUrl} color="bg-gradient-to-r from-red-600 to-red-400" icon="📸" />
-          <StatCard title="Incomplete Profiles" value={stats.incompleteProfiles} color="bg-gradient-to-r from-yellow-600 to-yellow-400" icon="⚠️" />
-          <StatCard title="Unique Parents" value={stats.uniqueParents} color="bg-gradient-to-r from-purple-600 to-purple-400" icon="👨‍👩‍👧" />
+    <div className="min-h-screen bg-gray-50 p-8">
+      <Toaster position="top-right" />
+      <div className="max-w-7xl mx-auto space-y-8">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <StatCard
+            title="Total Students"
+            value={stats?.students?.totalStudents || 0}
+            icon={<Users className="h-6 w-6" />}
+            trend="up"
+            percentage="12%"
+          />
+          <StatCard
+            title="Total Teachers"
+            value={stats?.teachers?.totalTeachers || 0}
+            icon={<BookOpen className="h-6 w-6" />}
+            trend="stable"
+          />
+          <StatCard
+            title="Net Balance"
+            value={`৳${(stats?.transactions?.netBalance || 0).toFixed(2)}`}
+            icon={<Wallet className="h-6 w-6" />}
+            trend={stats?.transactions?.netBalance >= 0 ? 'up' : 'down'}
+          />
+          <StatCard
+            title="Incomplete Profiles"
+            value={stats?.students?.incompleteProfiles || 0}
+            icon={<AlertCircle className="h-6 w-6" />}
+            trend="down"
+            percentage="5%"
+          />
         </div>
 
-        {/* Detailed Sections */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <Card className="lg:col-span-2 p-6">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-lg font-semibold">
+                <LineChart className="h-5 w-5" /> Financial Overview
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="h-64">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={financialData}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="name" />
+                    <YAxis />
+                    <Tooltip />
+                    <Bar dataKey="value">
+                      {financialData.map((_, index) => (
+                        <Cell key={index} fill={index === 0 ? '#10b981' : '#ef4444'} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="p-6">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-lg font-semibold">
+                <Users className="h-5 w-5" /> Class Distribution
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="h-64">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={classDistributionData}
+                      dataKey="value"
+                      nameKey="name"
+                      cx="50%"
+                      cy="50%"
+                      outerRadius={80}
+                      label
+                    >
+                      {classDistributionData.map((_, index) => (
+                        <Cell key={index} fill={chartColors[index % chartColors.length]} />
+                      ))}
+                    </Pie>
+                    <Tooltip />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Class Distribution */}
-          <div className="bg-white rounded-xl shadow-lg p-6 transform hover:scale-105 transition-transform duration-300">
-            <h2 className="text-2xl font-semibold text-gray-800 mb-4 flex items-center">
-              <span className="mr-2">🏫</span> Class Distribution
-            </h2>
-            <div className="space-y-3 max-h-96 overflow-y-auto">
-              {Object.entries(stats.classDistribution).map(([className, count]) => (
-                <div key={className} className="flex justify-between items-center p-2 bg-gray-50 rounded-lg">
-                  <span className="text-gray-700 font-medium">{className || 'Unclassified'}</span>
-                  <span className="bg-blue-100 text-blue-800 px-2 py-1 rounded-full text-sm">{count}</span>
-                </div>
-              ))}
-            </div>
-          </div>
+          <Card className="p-6">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-lg font-semibold">
+                <BookOpen className="h-5 w-5" /> Subject Distribution
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ScrollArea className="h-72 pr-4">
+                {subjectDistributionData.map((item, index) => (
+                  <div key={item.name} className="flex items-center justify-between p-3 hover:bg-gray-50 rounded-lg">
+                    <div className="flex items-center gap-3">
+                      <div className="h-3 w-3 rounded-full" style={{ backgroundColor: chartColors[index] }} />
+                      <span className="font-medium">{item.name}</span>
+                    </div>
+                    <Badge variant="outline" className="px-3 py-1">
+                      {item.value}
+                    </Badge>
+                  </div>
+                ))}
+              </ScrollArea>
+            </CardContent>
+          </Card>
 
-          {/* Missing Data Overview */}
-          <div className="bg-white rounded-xl shadow-lg p-6 transform hover:scale-105 transition-transform duration-300">
-            <h2 className="text-2xl font-semibold text-gray-800 mb-4 flex items-center">
-              <span className="mr-2">📊</span> Missing Data Overview
-            </h2>
-            <div className="space-y-3">
-              {Object.entries(stats.missingFields).map(([field, count]) => (
-                <div key={field} className="flex justify-between items-center">
-                  <span className="text-gray-700 capitalize">{field}</span>
-                  <span className={`text-sm px-2 py-1 rounded-full ${count > 0 ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'}`}>
-                    {count}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Data Quality */}
-          <div className="bg-white rounded-xl shadow-lg p-6 transform hover:scale-105 transition-transform duration-300 lg:col-span-2">
-            <h2 className="text-2xl font-semibold text-gray-800 mb-4 flex items-center">
-              <span className="mr-2">✅</span> Data Quality
-            </h2>
-            <div className="space-y-4">
-              <div className="flex justify-between">
-                <span className="text-gray-600">Last Updated</span>
-                <span className="font-medium text-gray-800">
-                  {new Date(stats.lastUpdated).toLocaleString()}
+          <Card className="p-6">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-lg font-semibold">
+                <Coins className="h-5 w-5" /> Salary Overview
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="flex justify-between items-center">
+                <span>Total Monthly Salary</span>
+                <span className="font-semibold text-emerald-600">
+                  ৳{(stats?.teachers?.totalSalary || 0).toFixed(2)}
                 </span>
               </div>
-              <div className="flex justify-between">
-                <span className="text-gray-600">Profile Completion</span>
-                <span className="font-medium text-gray-800">
-                  {Math.round(((stats.totalStudents - stats.incompleteProfiles) / stats.totalStudents) * 100)}%
-                </span>
+              <div className="space-y-2">
+                <h4 className="font-medium">Designation Distribution</h4>
+                {Object.entries(stats?.teachers?.designationDistribution || {}).map(([designation, count]) => (
+                  <div key={designation} className="flex items-center justify-between">
+                    <span className="text-gray-600">{designation}</span>
+                    <span className="font-medium">{count}</span>
+                  </div>
+                ))}
               </div>
-              <div className="w-full bg-gray-200 rounded-full h-3">
-                <div
-                  className="bg-gradient-to-r from-green-500 to-blue-500 h-3 rounded-full transition-all duration-500"
-                  style={{
-                    width: `${((stats.totalStudents - stats.incompleteProfiles) / stats.totalStudents) * 100}%`
-                  }}
-                ></div>
-              </div>
-            </div>
-          </div>
+            </CardContent>
+          </Card>
         </div>
+
+        <Card className="p-6">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-lg font-semibold">
+              <AlertCircle className="h-5 w-5" /> Data Quality Report
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <span>Profile Completion</span>
+                <span className="font-semibold">
+                  {Math.round(
+                    ((stats.students.totalStudents - stats.students.incompleteProfiles) /
+                      stats.students.totalStudents) *
+                      100
+                  ) || 0}%
+                </span>
+              </div>
+              <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-emerald-500 transition-all duration-500"
+                  style={{
+                    width: `${((stats.students.totalStudents - stats.students.incompleteProfiles) /
+                      stats.students.totalStudents) *
+                      100}%`
+                  }}
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <span>Unique Parent Accounts</span>
+                <span className="font-semibold">{stats.students.uniqueParents}</span>
+              </div>
+              <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-blue-500"
+                  style={{
+                    width: `${(stats.students.uniqueParents / stats.students.totalStudents) * 100}%`
+                  }}
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <span>Last Updated</span>
+                <span className="font-medium text-sm">
+                  {new Date(stats.lastUpdated).toLocaleDateString()}
+                </span>
+              </div>
+              <div className="h-2 bg-gray-200 rounded-full" />
+            </div>
+
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <span>Total Transactions</span>
+                <span className="font-semibold">{stats.transactions.totalTransactions}</span>
+              </div>
+              <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-purple-500"
+                  style={{
+                    width: `${Math.min(
+                      (stats.transactions.totalTransactions / 1000) * 100,
+                      100
+                    )}%`
+                  }}
+                />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       </div>
     </div>
   );
 };
 
-// Enhanced StatCard Component
 interface StatCardProps {
   title: string;
   value: string | number;
-  color: string;
-  icon: string;
+  icon: React.ReactNode;
+  trend?: 'up' | 'down' | 'stable';
+  percentage?: string;
 }
 
-const StatCard: React.FC<StatCardProps> = ({ title, value, color, icon }) => (
-  <div className={`${color} text-white p-6 rounded-xl shadow-lg transform hover:scale-105 transition-transform duration-300`}>
-    <div className="flex items-center justify-between">
-      <div>
-        <h3 className="text-lg font-semibold">{title}</h3>
-        <p className="text-3xl font-bold mt-2">{value}</p>
+const StatCard: React.FC<StatCardProps> = ({ title, value, icon, trend, percentage }) => (
+  <Card className="group hover:border-gray-300 transition-colors">
+    <CardContent className="p-6 flex items-center justify-between">
+      <div className="space-y-2">
+        <div className="flex items-center gap-2 text-gray-500">
+          {icon}
+          <span className="text-sm font-medium">{title}</span>
+        </div>
+        <h3 className="text-3xl font-bold">{value}</h3>
       </div>
-      <span className="text-3xl opacity-75">{icon}</span>
-    </div>
-  </div>
+      {trend && (
+        <div className={`p-2 rounded-full ${trend === 'up' ? 'bg-emerald-100' : trend === 'down' ? 'bg-red-100' : 'bg-gray-100'}`}>
+          {trend === 'up' ? (
+            <ArrowUp className="h-5 w-5 text-emerald-600" />
+          ) : trend === 'down' ? (
+            <ArrowDown className="h-5 w-5 text-red-600" />
+          ) : (
+            <div className="h-5 w-5 bg-gray-400 rounded-full" />
+          )}
+        </div>
+      )}
+    </CardContent>
+    {percentage && (
+      <CardFooter className="px-6 pb-4 pt-0">
+        <span className={`text-sm ${trend === 'up' ? 'text-emerald-600' : 'text-red-600'}`}>
+          {percentage} from last month
+        </span>
+      </CardFooter>
+    )}
+  </Card>
 );
 
 export default AdminOverview;
